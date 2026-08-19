@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<base href="">
+<link rel="stylesheet" href="atom-one-light.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="atom-one-dark.min.css" media="(prefers-color-scheme: dark)">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --fg: #1f2328;
+    --muted: #59636e;
+    --border: #d1d9e0;
+    --border-light: #d1d9e0b3;
+    --code-bg: #f0f1f3;
+    --quote: #59636e;
+    --link: #0969da;
+    --row-alt: #f6f8fa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117;
+      --fg: #e6edf3;
+      --muted: #9198a1;
+      --border: #3d444d;
+      --border-light: #3d444db3;
+      --code-bg: #1c2128;
+      --quote: #9198a1;
+      --link: #4493f8;
+      --row-alt: #161b22;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0;
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-text-size-adjust: 100%;
+  }
+  article {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 40px 48px 80px;
+    word-wrap: break-word;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    margin-top: 1.5em;
+    margin-bottom: 0.6em;
+    font-weight: 600;
+    line-height: 1.25;
+  }
+  h1 { font-size: 1.9em; padding-bottom: .3em; border-bottom: 1px solid var(--border-light); }
+  h2 { font-size: 1.45em; padding-bottom: .3em; border-bottom: 1px solid var(--border-light); }
+  h3 { font-size: 1.2em; }
+  h4 { font-size: 1em; }
+  h5 { font-size: .9em; }
+  h6 { font-size: .85em; color: var(--muted); }
+  h1:first-child { margin-top: 0; }
+  p, ul, ol, table, pre, blockquote { margin-top: 0; margin-bottom: 14px; }
+  a { color: var(--link); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 2em; }
+  li + li { margin-top: .2em; }
+  li > p { margin-bottom: 4px; }
+  ul.contains-task-list { padding-left: 1.2em; list-style: none; }
+  .task-list-item input { margin: 0 .4em .2em 0; vertical-align: middle; }
+  code, pre, kbd {
+    font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+    font-size: 85%;
+  }
+  code { background: var(--code-bg); padding: .2em .4em; border-radius: 5px; }
+  pre {
+    background: var(--code-bg);
+    padding: 14px 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    line-height: 1.45;
+  }
+  pre code { background: none; padding: 0; font-size: 100%; }
+  /* Keep our pre background; the hljs themes supply token colors only. */
+  .hljs { background: transparent; }
+  blockquote {
+    margin-left: 0;
+    padding: 0 1em;
+    color: var(--quote);
+    border-left: 4px solid var(--border);
+  }
+  table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+  th, td { border: 1px solid var(--border); padding: 6px 13px; }
+  th { font-weight: 600; }
+  tr:nth-child(2n) td { background: var(--row-alt); }
+  img { max-width: 100%; border-radius: 4px; }
+  hr { height: 1px; border: 0; background: var(--border); margin: 24px 0; }
+  ::selection { background: color-mix(in srgb, var(--link) 25%, transparent); }
+</style>
+<script src="marked.min.js"></script>
+<script src="highlight.min.js"></script>
+<script src="zig.js"></script>
+</head>
+<body>
+<article id="content"></article>
+<script>
+  marked.use({ gfm: true, breaks: false });
+
+  function slugify(text) {
+    return text.toLowerCase().trim()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/\s+/g, '-');
+  }
+
+  function renderMarkdown(text, baseHref) {
+    document.querySelector('base').href = baseHref;
+    const y = window.scrollY;
+    const content = document.getElementById('content');
+    content.innerHTML = marked.parse(text);
+    for (const block of content.querySelectorAll('pre code')) {
+      hljs.highlightElement(block);
+    }
+    // GitHub-style heading anchors so #fragment links work.
+    const seen = {};
+    for (const h of document.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
+      let id = slugify(h.textContent);
+      if (seen[id] !== undefined) { seen[id]++; id += '-' + seen[id]; } else { seen[id] = 0; }
+      h.id = id;
+    }
+    window.scrollTo(0, y);
+  }
+</script>
+</body>
+</html>
