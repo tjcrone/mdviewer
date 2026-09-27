@@ -1,2 +1,21 @@
+# Build output
 build/
+
+# macOS
 .DS_Store
+._*
+
+# Editors / tools
+.claude/settings.local.json
+.vscode/
+.idea/
+*.swp
+*~
+
+# Swift / Xcode (in case a project is ever generated)
+.build/
+.swiftpm/
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+DerivedData/
