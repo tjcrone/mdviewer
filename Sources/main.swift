@@ -8,6 +8,8 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, WKNa
     let fileURL: URL
     private var webView: WKWebView!
     private var fileMonitor: DispatchSourceFileSystemObject?
+    private var pollTimer: Timer?
+    private var lastModified: Date?
     private var pageReady = false
     var onClose: (() -> Void)?
 
@@ -33,6 +35,7 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, WKNa
         // Read access to / so relative images and links inside the markdown resolve.
         webView.loadFileURL(viewerPage, allowingReadAccessTo: URL(fileURLWithPath: "/"))
         startMonitoring()
+        startPolling()
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -46,7 +49,12 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, WKNa
             ?? "*Unable to read \(fileURL.path)*"
         let baseHref = fileURL.deletingLastPathComponent().absoluteString
         guard let textJSON = jsonString(text), let baseJSON = jsonString(baseHref) else { return }
+        lastModified = modificationDate()
         webView.evaluateJavaScript("renderMarkdown(\(textJSON), \(baseJSON));", completionHandler: nil)
+    }
+
+    private func modificationDate() -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: fileURL.path))?[.modificationDate] as? Date
     }
 
     private func jsonString(_ s: String) -> String? {
@@ -79,6 +87,16 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, WKNa
         source.setCancelHandler { Darwin.close(fd) }
         source.resume()
         fileMonitor = source
+    }
+
+    // MARK: Modification-date polling (SMB/iCloud/Dropbox deliver no vnode events)
+
+    private func startPolling() {
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self, self.pageReady else { return }
+            let current = self.modificationDate()
+            if current != self.lastModified { self.render() }
+        }
     }
 
     // MARK: WKNavigationDelegate
@@ -117,6 +135,8 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, WKNa
     func windowWillClose(_ notification: Notification) {
         fileMonitor?.cancel()
         fileMonitor = nil
+        pollTimer?.invalidate()
+        pollTimer = nil
         onClose?()
     }
 }
