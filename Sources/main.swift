@@ -152,6 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func openDocument(_ url: URL) {
         let url = url.standardizedFileURL
         if let existing = controllers.first(where: { $0.fileURL.standardizedFileURL == url }) {
+            existing.render()  // the watcher may have missed changes (e.g. on SMB shares)
             existing.window?.makeKeyAndOrderFront(nil)
             return
         }
