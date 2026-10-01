@@ -55,6 +55,7 @@ All fetched from jsdelivr, committed so builds are offline:
 - `Info.plist` `CFBundleDocumentTypes` + `UTImportedTypeDeclarations` are what
   make double-click work. Default-handler status is user-set (Get Info →
   Change All, or `duti -s com.tjcrone.mdviewer net.daringfireball.markdown all`).
+- `NSWorkspace.setDefaultApplication(at:toOpen:)` is async; a `swift -e` one-liner that doesn't wait for the completion handler exits before the change lands and reports nothing. README has a working version with a semaphore.
 
 ## Deliberate design decisions
 

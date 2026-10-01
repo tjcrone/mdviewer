@@ -28,6 +28,24 @@ Or with [duti](https://github.com/moretension/duti):
 duti -s com.tjcrone.mdviewer net.daringfireball.markdown all
 ```
 
+Or without installing anything, via the `swift` interpreter that ships with the Command Line Tools:
+
+```sh
+cat > /tmp/setdefault.swift <<'EOF'
+import AppKit
+import UniformTypeIdentifiers
+let sem = DispatchSemaphore(value: 0)
+NSWorkspace.shared.setDefaultApplication(at: URL(fileURLWithPath: "/Applications/MDViewer.app"), toOpen: UTType("net.daringfireball.markdown")!) { err in
+    print(err.map { "error: \($0)" } ?? "ok")
+    sem.signal()
+}
+_ = sem.wait(timeout: .now() + 10)
+EOF
+swift /tmp/setdefault.swift
+```
+
+The semaphore matters: `setDefaultApplication` completes asynchronously, and if the process exits first the change is silently dropped.
+
 ## Keys
 
 | Key | Action |
