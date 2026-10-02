@@ -23,12 +23,8 @@ See README.md for user-facing docs.
   (both arguments JSON-encoded strings).
 - `viewer.html` is loaded once per window at creation. ⌘R only re-renders the
   markdown — CSS/JS changes need the window closed and reopened.
-- `loadFileURL(_, allowingReadAccessTo: "/")` is deliberate: the base href is
-  set to the markdown file's directory so relative images and links resolve,
-  and read access must cover both the app Resources and any file's directory.
-- Navigation policy: only viewer.html (+ fragments) loads in the webview.
-  Clicked `.md` links open a new viewer window; everything else goes to
-  `NSWorkspace.shared.open` (browser, Finder, etc.).
+- The document's own directory is served to the webview over a custom `mdfile://` scheme (`LocalFileSchemeHandler`), and the base href points there, so relative images and links resolve. Swift reads the bytes itself, so WebKit's file-URL sandbox is not involved at all. `loadFileURL` now grants read access only to the app's own `Resources`, which is all the viewer page's own CSS/JS needs.
+- Navigation policy: only viewer.html (+ fragments) loads in the webview. Links arrive as `mdfile://` and get mapped back to file URLs — `.md` opens a new viewer window, everything else goes to `NSWorkspace.shared.open` (browser, Finder, etc.).
 - File watching uses a DispatchSource on an `O_EVTONLY` fd. On delete/rename it
   re-attaches after 200ms — this is what makes Vim-style save-via-rename work.
 
@@ -44,6 +40,8 @@ All fetched from jsdelivr, committed so builds are offline:
 
 ## Gotchas learned the hard way
 
+- `allowingReadAccessTo:` does not grant access across a mount point, and the grant must be an ancestor of the page being loaded or WebKit refuses the load outright. So `URL(fileURLWithPath: "/")` does *not* mean "the whole filesystem": with the app on the system volume and documents on `/Volumes/Macintosh HD CS`, every relative image silently failed — `naturalWidth` 0, no error raised anywhere. This is why figures go through `mdfile://` instead. Established 2026-10-02 over a matrix of page locations and grants; the same page loading from the CS volume did resolve its images, which is how the bug stayed hidden.
+- The `mdfile://` handler serves whole files synchronously and ignores Range requests, so `<video>`/`<audio>` seeking is not supported. Images, the case it exists for, are unaffected.
 - highlight.js silently skips code fences tagged with an unknown language —
   no fallback to auto-detect. Untagged fences DO auto-detect. If a language
   renders all-black, it needs a grammar registered (see zig.js pattern).

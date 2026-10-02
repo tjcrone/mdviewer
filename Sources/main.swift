@@ -2,6 +2,40 @@ import Cocoa
 import WebKit
 import UniformTypeIdentifiers
 
+// MARK: - Local file scheme
+
+/// Serves the markdown file's own directory (images, and anything else it links
+/// to) over `mdfile://`.
+///
+/// `loadFileURL(_, allowingReadAccessTo:)` cannot grant the webview access
+/// across a mount point: the app lives on the system volume and documents
+/// usually do not, so relative images never loaded no matter how wide the
+/// grant. Reading the bytes here sidesteps the file-URL sandbox entirely.
+final class LocalFileSchemeHandler: NSObject, WKURLSchemeHandler {
+    static let scheme = "mdfile"
+
+    func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
+        guard let url = task.request.url,
+              let fileURL = url.convertedToScheme("file"),
+              let data = try? Data(contentsOf: fileURL) else {
+            task.didFailWithError(URLError(.fileDoesNotExist))
+            return
+        }
+        let mime = UTType(filenameExtension: fileURL.pathExtension)?.preferredMIMEType
+            ?? "application/octet-stream"
+        let response = HTTPURLResponse(
+            url: url, statusCode: 200, httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": mime, "Content-Length": "\(data.count)"])!
+        // Served synchronously: the task cannot be stopped mid-flight, which is
+        // what would otherwise make the didReceive calls throw.
+        task.didReceive(response)
+        task.didReceive(data)
+        task.didFinish()
+    }
+
+    func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
+}
+
 // MARK: - Document window
 
 final class DocumentWindowController: NSWindowController, NSWindowDelegate, WKNavigationDelegate {
@@ -26,14 +60,20 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, WKNa
         super.init(window: window)
         window.delegate = self
 
-        webView = WKWebView(frame: window.contentView!.bounds)
+        let configuration = WKWebViewConfiguration()
+        configuration.setURLSchemeHandler(LocalFileSchemeHandler(),
+                                          forURLScheme: LocalFileSchemeHandler.scheme)
+        webView = WKWebView(frame: window.contentView!.bounds, configuration: configuration)
         webView.autoresizingMask = [.width, .height]
         webView.navigationDelegate = self
         window.contentView!.addSubview(webView)
 
-        let viewerPage = Bundle.main.resourceURL!.appendingPathComponent("viewer.html")
-        // Read access to / so relative images and links inside the markdown resolve.
-        webView.loadFileURL(viewerPage, allowingReadAccessTo: URL(fileURLWithPath: "/"))
+        let resources = Bundle.main.resourceURL!
+        let viewerPage = resources.appendingPathComponent("viewer.html")
+        // Only our own assets load as file URLs; the document's own directory is
+        // served over mdfile:// instead. The grant must be an ancestor of the
+        // page or WebKit refuses the load outright.
+        webView.loadFileURL(viewerPage, allowingReadAccessTo: resources)
         startMonitoring()
         startPolling()
     }
@@ -47,7 +87,9 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, WKNa
         let text = (try? String(contentsOf: fileURL, encoding: .utf8))
             ?? (try? String(contentsOf: fileURL, encoding: .isoLatin1))
             ?? "*Unable to read \(fileURL.path)*"
-        let baseHref = fileURL.deletingLastPathComponent().absoluteString
+        guard let baseURL = fileURL.deletingLastPathComponent()
+            .convertedToScheme(LocalFileSchemeHandler.scheme) else { return }
+        let baseHref = baseURL.absoluteString
         guard let textJSON = jsonString(text), let baseJSON = jsonString(baseHref) else { return }
         lastModified = modificationDate()
         webView.evaluateJavaScript("renderMarkdown(\(textJSON), \(baseJSON));", completionHandler: nil)
@@ -115,10 +157,14 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, WKNa
             return decisionHandler(.allow)
         }
         decisionHandler(.cancel)
-        if url.isFileURL, ["md", "markdown", "mdown", "mkd"].contains(url.pathExtension.lowercased()) {
-            (NSApp.delegate as? AppDelegate)?.openDocument(url)
+        // Links in the document resolve against the mdfile:// base href.
+        let target = url.scheme == LocalFileSchemeHandler.scheme
+            ? (url.convertedToScheme("file") ?? url)
+            : url
+        if target.isFileURL, ["md", "markdown", "mdown", "mkd"].contains(target.pathExtension.lowercased()) {
+            (NSApp.delegate as? AppDelegate)?.openDocument(target)
         } else {
-            NSWorkspace.shared.open(url)
+            NSWorkspace.shared.open(target)
         }
     }
 
@@ -142,6 +188,15 @@ final class DocumentWindowController: NSWindowController, NSWindowDelegate, WKNa
 }
 
 private extension URL {
+    /// Same path, different scheme, fragment dropped — a fragment would defeat
+    /// both `Data(contentsOf:)` and the path extension checks.
+    func convertedToScheme(_ scheme: String) -> URL? {
+        var components = URLComponents(url: self, resolvingAgainstBaseURL: false)
+        components?.scheme = scheme
+        components?.fragment = nil
+        return components?.url
+    }
+
     func deletingFragment() -> URL {
         var components = URLComponents(url: self, resolvingAgainstBaseURL: false)
         components?.fragment = nil

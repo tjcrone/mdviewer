@@ -6,6 +6,7 @@ A featherweight native macOS markdown viewer. Double-click a `.md` file, read it
 - GitHub-flavored rendering: tables, task lists, strikethrough, syntax-highlighted code
 - Light/dark mode follows the system
 - Auto-reloads when the file changes on disk (works with Vim-style save-via-rename)
+- Embedded images render inline — `![caption](figures/plot.png)` — from anywhere on disk
 - Relative links to other `.md` files open in a new viewer window; web links open in your browser
 - Quits when the last window closes
 
